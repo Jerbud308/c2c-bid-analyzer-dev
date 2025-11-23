@@ -59,6 +59,10 @@ export function formatFileSize(bytes: number): string {
 export function formatDate(dateString: string): string {
   try {
     const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return dateString;
+    }
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -83,6 +87,10 @@ export function formatDate(dateString: string): string {
 export function formatDateTime(dateString: string): string {
   try {
     const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return dateString;
+    }
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -111,6 +119,12 @@ export function formatDateTime(dateString: string): string {
 export function getDaysRemaining(deadline: string): number {
   try {
     const deadlineDate = new Date(deadline);
+
+    // Check if date is valid
+    if (isNaN(deadlineDate.getTime())) {
+      return 0;
+    }
+
     const today = new Date();
 
     // Reset time to midnight for accurate day calculation

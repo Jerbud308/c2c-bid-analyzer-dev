@@ -1,0 +1,2 @@
+This is a sample text file for testing file validation.
+It should be rejected when trying to upload as a bid package.

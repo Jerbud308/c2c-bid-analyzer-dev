@@ -13,7 +13,6 @@
  * - Framework agnostic (works with Vite, Next.js, etc.)
  */
 
-import { supabase } from './supabase';
 import {
   UploadResponse,
   StatusResponse,
