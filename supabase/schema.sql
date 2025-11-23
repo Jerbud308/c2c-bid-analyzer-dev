@@ -275,5 +275,140 @@ CREATE POLICY "Enable all access for service role"
     WITH CHECK (true);
 
 -- ============================================================================
+-- TABLE: templates
+-- ============================================================================
+-- Stores reusable text templates for bid response content
+-- ============================================================================
+
+CREATE TABLE templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    content TEXT NOT NULL,
+    variables JSONB DEFAULT '[]'::jsonb,
+    tags TEXT[] DEFAULT '{}',
+    status TEXT DEFAULT 'draft',
+    version INTEGER DEFAULT 1,
+    created_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    approved_at TIMESTAMP WITH TIME ZONE,
+    approved_by TEXT,
+    usage_count INTEGER DEFAULT 0,
+
+    -- Constraint: category must be one of the valid types
+    CONSTRAINT templates_category_check
+        CHECK (category IN ('company_info', 'safety', 'quality', 'personnel', 'past_projects', 'capabilities', 'certifications', 'other')),
+
+    -- Constraint: status must be one of the valid states
+    CONSTRAINT templates_status_check
+        CHECK (status IN ('draft', 'approved', 'archived'))
+);
+
+-- Add comment documentation
+COMMENT ON TABLE templates IS 'Reusable text templates for bid response content with variable placeholders';
+COMMENT ON COLUMN templates.content IS 'Template content with variable placeholders like {PROJECT_NAME}, {AGENCY}';
+COMMENT ON COLUMN templates.variables IS 'Array of variable names extracted from content (e.g., ["PROJECT_NAME", "AGENCY"])';
+COMMENT ON COLUMN templates.tags IS 'Searchable tags for categorization (e.g., roofing, asbestos, federal, Florida)';
+COMMENT ON COLUMN templates.status IS 'Workflow status: draft -> approved or archived';
+COMMENT ON COLUMN templates.usage_count IS 'Number of times this template has been used in bids';
+
+-- ============================================================================
+-- TABLE: template_versions
+-- ============================================================================
+-- Stores version history for templates
+-- ============================================================================
+
+CREATE TABLE template_versions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    template_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    variables JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by TEXT,
+    change_notes TEXT,
+
+    -- Foreign key relationship
+    CONSTRAINT fk_template
+        FOREIGN KEY (template_id)
+        REFERENCES templates(id)
+        ON DELETE CASCADE
+);
+
+-- Add comment documentation
+COMMENT ON TABLE template_versions IS 'Version history for template changes';
+COMMENT ON COLUMN template_versions.change_notes IS 'Description of what changed in this version';
+
+-- ============================================================================
+-- INDEXES FOR TEMPLATES
+-- ============================================================================
+
+-- Templates indexes
+CREATE INDEX idx_templates_category
+    ON templates(category);
+
+CREATE INDEX idx_templates_status
+    ON templates(status);
+
+CREATE INDEX idx_templates_tags
+    ON templates USING gin(tags);
+
+CREATE INDEX idx_templates_usage_count
+    ON templates(usage_count DESC);
+
+-- Template versions indexes
+CREATE INDEX idx_template_versions_template
+    ON template_versions(template_id);
+
+-- ============================================================================
+-- TRIGGERS FOR TEMPLATES
+-- ============================================================================
+
+-- Apply updated_at trigger to templates table
+CREATE TRIGGER update_templates_updated
+    BEFORE UPDATE ON templates
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- ROW LEVEL SECURITY FOR TEMPLATES
+-- ============================================================================
+
+-- Enable RLS
+ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE template_versions ENABLE ROW LEVEL SECURITY;
+
+-- Policies: Allow all operations for authenticated users
+CREATE POLICY "Enable all access for authenticated users"
+    ON templates
+    FOR ALL
+    TO authenticated
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Enable all access for authenticated users"
+    ON template_versions
+    FOR ALL
+    TO authenticated
+    USING (true)
+    WITH CHECK (true);
+
+-- Allow service role full access
+CREATE POLICY "Enable all access for service role"
+    ON templates
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Enable all access for service role"
+    ON template_versions
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+-- ============================================================================
 -- END OF SCHEMA
 -- ============================================================================
