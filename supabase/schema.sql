@@ -155,6 +155,42 @@ COMMENT ON COLUMN bid_analysis.red_flags IS 'Array of disqualifying or high-risk
 COMMENT ON COLUMN bid_analysis.raw_ocr_text IS 'Full OCR-extracted text from PDF document';
 
 -- ============================================================================
+-- TABLE: compliance_checklists
+-- ============================================================================
+-- Stores automatically generated compliance checklists for each opportunity
+-- ============================================================================
+
+CREATE TABLE compliance_checklists (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    opportunity_id UUID NOT NULL,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completion_percentage INTEGER DEFAULT 0,
+    items JSONB DEFAULT '[]'::jsonb,
+    custom_items JSONB DEFAULT '[]'::jsonb,
+
+    -- Foreign key relationship
+    CONSTRAINT fk_opportunity
+        FOREIGN KEY (opportunity_id)
+        REFERENCES opportunities(id)
+        ON DELETE CASCADE,
+
+    -- Constraints
+    CONSTRAINT compliance_checklists_completion_check
+        CHECK (completion_percentage >= 0 AND completion_percentage <= 100),
+
+    -- Unique constraint: one checklist per opportunity
+    CONSTRAINT compliance_checklists_unique_opportunity
+        UNIQUE (opportunity_id)
+);
+
+-- Add comment documentation
+COMMENT ON TABLE compliance_checklists IS 'Auto-generated compliance checklists for tracking bid requirements';
+COMMENT ON COLUMN compliance_checklists.items IS 'Array of checklist items: [{id, category, description, reference_section, status, responsible_party, notes, source, created_at, completed_at}]';
+COMMENT ON COLUMN compliance_checklists.custom_items IS 'Array of user-added custom checklist items with same structure as items';
+COMMENT ON COLUMN compliance_checklists.completion_percentage IS 'Percentage of items marked as complete (0-100)';
+
+-- ============================================================================
 -- INDEXES
 -- ============================================================================
 -- Performance optimization for common queries
@@ -197,6 +233,10 @@ CREATE INDEX idx_bid_analysis_fit_score
     ON bid_analysis(fit_score DESC)
     WHERE fit_score IS NOT NULL;
 
+-- Compliance checklists indexes
+CREATE INDEX idx_compliance_opportunity
+    ON compliance_checklists(opportunity_id);
+
 -- ============================================================================
 -- FUNCTIONS & TRIGGERS
 -- ============================================================================
@@ -216,6 +256,12 @@ CREATE TRIGGER set_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Apply trigger to compliance_checklists table
+CREATE TRIGGER update_compliance_updated
+    BEFORE UPDATE ON compliance_checklists
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================================
@@ -227,6 +273,7 @@ CREATE TRIGGER set_updated_at
 ALTER TABLE opportunities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bid_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bid_analysis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE compliance_checklists ENABLE ROW LEVEL SECURITY;
 
 -- Policies: Allow all operations for authenticated users
 -- (Tighten in production with user-specific or role-based policies)
@@ -269,6 +316,20 @@ CREATE POLICY "Enable all access for service role"
 
 CREATE POLICY "Enable all access for service role"
     ON bid_analysis
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Enable all access for authenticated users"
+    ON compliance_checklists
+    FOR ALL
+    TO authenticated
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Enable all access for service role"
+    ON compliance_checklists
     FOR ALL
     TO service_role
     USING (true)
