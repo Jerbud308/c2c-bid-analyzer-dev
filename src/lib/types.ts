@@ -223,6 +223,75 @@ export interface PricingStructure {
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 // ============================================================================
+// Notification Types
+// ============================================================================
+
+/**
+ * User notification preferences
+ */
+export interface NotificationPreferences {
+  /** User's email address */
+  user_email: string;
+  /** User's display name */
+  user_name: string | null;
+  /** Receive email when analysis completes */
+  notify_analysis_complete: boolean;
+  /** Receive email when processing fails */
+  notify_processing_failed: boolean;
+  /** Receive deadline reminder emails */
+  notify_deadline_reminders: boolean;
+  /** Receive daily digest of new opportunities */
+  notify_daily_digest: boolean;
+  /** Receive email when opportunity status changes */
+  notify_status_change: boolean;
+  /** Time of day to receive daily digest (HH:mm:ss format) */
+  digest_time: string;
+  /** Days before deadline to send reminders (e.g., [7, 3, 1]) */
+  deadline_reminder_days: number[];
+  /** Timestamp when preferences were created */
+  created_at: string;
+  /** Timestamp when preferences were last updated */
+  updated_at: string;
+}
+
+/**
+ * Valid notification types
+ */
+export type NotificationType =
+  | 'analysis_complete'
+  | 'processing_failed'
+  | 'deadline_reminder'
+  | 'daily_digest'
+  | 'status_change';
+
+/**
+ * Notification delivery status
+ */
+export type NotificationStatus = 'sent' | 'failed' | 'bounced';
+
+/**
+ * Notification log entry
+ */
+export interface NotificationLog {
+  /** Unique identifier for the log entry */
+  id: string;
+  /** Email address notification was sent to */
+  user_email: string;
+  /** Type of notification */
+  notification_type: NotificationType;
+  /** Associated opportunity ID (if applicable) */
+  opportunity_id: string | null;
+  /** Timestamp when notification was sent */
+  sent_at: string;
+  /** Delivery status */
+  status: NotificationStatus;
+  /** Error message if delivery failed */
+  error_message: string | null;
+  /** Additional metadata about the email */
+  email_metadata: Record<string, any>;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 

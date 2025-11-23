@@ -18,6 +18,8 @@ import {
   UploadResponse,
   StatusResponse,
   AnalysisResponse,
+  NotificationPreferences,
+  NotificationLog,
   ApiError,
 } from './types';
 import {
@@ -360,6 +362,164 @@ export const api = {
         );
       }
       throw normalizeError(error, 'getAnalysis');
+    }
+  },
+
+  /**
+   * Gets notification preferences for a user
+   *
+   * @param email - The user's email address
+   * @returns User's notification preferences
+   * @throws {ApiError} If retrieval fails or user not found
+   *
+   * @example
+   * ```typescript
+   * const prefs = await api.getNotificationPreferences('user@example.com')
+   * console.log(`Daily digest enabled: ${prefs.notify_daily_digest}`)
+   * ```
+   */
+  async getNotificationPreferences(email: string): Promise<NotificationPreferences> {
+    devLog('Getting notification preferences', { email });
+
+    try {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_email', email)
+        .single();
+
+      if (error) {
+        throw new ApiError(
+          `Failed to get preferences: ${error.message}`,
+          error.code === 'PGRST116' ? 404 : 500,
+          { email, error }
+        );
+      }
+
+      devLog('Preferences retrieved', { email });
+      return data as NotificationPreferences;
+    } catch (error) {
+      throw normalizeError(error, 'getNotificationPreferences');
+    }
+  },
+
+  /**
+   * Updates notification preferences for a user
+   *
+   * @param email - The user's email address
+   * @param preferences - Partial preferences to update
+   * @returns Updated notification preferences
+   * @throws {ApiError} If update fails
+   *
+   * @example
+   * ```typescript
+   * const updated = await api.updateNotificationPreferences('user@example.com', {
+   *   notify_daily_digest: false,
+   *   deadline_reminder_days: [7, 3, 1]
+   * })
+   * ```
+   */
+  async updateNotificationPreferences(
+    email: string,
+    preferences: Partial<Omit<NotificationPreferences, 'user_email' | 'created_at' | 'updated_at'>>
+  ): Promise<NotificationPreferences> {
+    devLog('Updating notification preferences', { email, preferences });
+
+    try {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .update(preferences)
+        .eq('user_email', email)
+        .select()
+        .single();
+
+      if (error) {
+        throw new ApiError(
+          `Failed to update preferences: ${error.message}`,
+          500,
+          { email, error }
+        );
+      }
+
+      devLog('Preferences updated', { email });
+      return data as NotificationPreferences;
+    } catch (error) {
+      throw normalizeError(error, 'updateNotificationPreferences');
+    }
+  },
+
+  /**
+   * Gets notification history for a user
+   *
+   * @param email - The user's email address
+   * @param limit - Maximum number of notifications to retrieve (default: 50)
+   * @returns Array of notification log entries
+   * @throws {ApiError} If retrieval fails
+   *
+   * @example
+   * ```typescript
+   * const history = await api.getNotificationHistory('user@example.com', 20)
+   * console.log(`Last 20 notifications:`, history)
+   * ```
+   */
+  async getNotificationHistory(email: string, limit = 50): Promise<NotificationLog[]> {
+    devLog('Getting notification history', { email, limit });
+
+    try {
+      const { data, error } = await supabase
+        .from('notification_log')
+        .select('*')
+        .eq('user_email', email)
+        .order('sent_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        throw new ApiError(
+          `Failed to get notification history: ${error.message}`,
+          500,
+          { email, error }
+        );
+      }
+
+      devLog('Notification history retrieved', { email, count: data?.length || 0 });
+      return (data || []) as NotificationLog[];
+    } catch (error) {
+      throw normalizeError(error, 'getNotificationHistory');
+    }
+  },
+
+  /**
+   * Sends a test notification email
+   *
+   * @param email - The recipient's email address
+   * @param type - Type of notification to test
+   * @returns Success status
+   * @throws {ApiError} If test email fails to send
+   *
+   * @example
+   * ```typescript
+   * await api.sendTestNotification('user@example.com', 'daily_digest')
+   * ```
+   */
+  async sendTestNotification(email: string, type: string = 'analysis_complete'): Promise<{ success: boolean }> {
+    devLog('Sending test notification', { email, type });
+
+    const url = `${FUNCTIONS_BASE_URL}/send-test-notification`;
+    const options: RequestInit = {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, type }),
+    };
+
+    try {
+      const response = await fetchWithRetry<{ success: boolean }>(url, options);
+      devLog('Test notification sent', { email, type });
+      return response;
+    } catch (error) {
+      throw normalizeError(error, 'sendTestNotification');
     }
   },
 };

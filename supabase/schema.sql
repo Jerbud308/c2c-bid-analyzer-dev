@@ -275,5 +275,159 @@ CREATE POLICY "Enable all access for service role"
     WITH CHECK (true);
 
 -- ============================================================================
+-- TABLE: user_preferences
+-- ============================================================================
+-- Stores user notification preferences and settings
+-- ============================================================================
+
+CREATE TABLE user_preferences (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_email TEXT UNIQUE NOT NULL,
+    user_name TEXT,
+
+    -- Notification toggles
+    notify_analysis_complete BOOLEAN DEFAULT true,
+    notify_processing_failed BOOLEAN DEFAULT true,
+    notify_deadline_reminders BOOLEAN DEFAULT true,
+    notify_daily_digest BOOLEAN DEFAULT true,
+    notify_status_change BOOLEAN DEFAULT false,
+
+    -- Settings
+    digest_time TIME DEFAULT '08:00:00',
+    deadline_reminder_days INTEGER[] DEFAULT ARRAY[7, 3, 1],
+
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add comment documentation
+COMMENT ON TABLE user_preferences IS 'User notification preferences and settings';
+COMMENT ON COLUMN user_preferences.user_email IS 'User email address (unique identifier)';
+COMMENT ON COLUMN user_preferences.notify_analysis_complete IS 'Send email when bid analysis completes';
+COMMENT ON COLUMN user_preferences.notify_processing_failed IS 'Send email when document processing fails';
+COMMENT ON COLUMN user_preferences.notify_deadline_reminders IS 'Send reminders before bid deadlines';
+COMMENT ON COLUMN user_preferences.notify_daily_digest IS 'Send daily digest of new opportunities';
+COMMENT ON COLUMN user_preferences.notify_status_change IS 'Send email when opportunity status changes';
+COMMENT ON COLUMN user_preferences.digest_time IS 'Time of day to send daily digest (EST)';
+COMMENT ON COLUMN user_preferences.deadline_reminder_days IS 'Array of days before deadline to send reminders (e.g., [7, 3, 1])';
+
+-- ============================================================================
+-- TABLE: notification_log
+-- ============================================================================
+-- Logs all notification emails sent to users
+-- ============================================================================
+
+CREATE TABLE notification_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_email TEXT NOT NULL,
+    notification_type TEXT NOT NULL,
+    opportunity_id UUID,
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status TEXT DEFAULT 'sent',
+    error_message TEXT,
+    email_metadata JSONB DEFAULT '{}'::jsonb,
+
+    -- Foreign key relationship (optional, as opportunity may be deleted)
+    CONSTRAINT fk_opportunity
+        FOREIGN KEY (opportunity_id)
+        REFERENCES opportunities(id)
+        ON DELETE SET NULL,
+
+    -- Constraints
+    CONSTRAINT notification_log_type_check
+        CHECK (notification_type IN ('analysis_complete', 'processing_failed', 'deadline_reminder', 'daily_digest', 'status_change')),
+
+    CONSTRAINT notification_log_status_check
+        CHECK (status IN ('sent', 'failed', 'bounced'))
+);
+
+-- Add comment documentation
+COMMENT ON TABLE notification_log IS 'Audit log of all notification emails sent';
+COMMENT ON COLUMN notification_log.notification_type IS 'Type of notification: analysis_complete, processing_failed, deadline_reminder, daily_digest, status_change';
+COMMENT ON COLUMN notification_log.status IS 'Delivery status: sent, failed, bounced';
+COMMENT ON COLUMN notification_log.email_metadata IS 'Additional metadata like email provider ID, template version, etc.';
+
+-- ============================================================================
+-- INDEXES: notification tables
+-- ============================================================================
+
+CREATE INDEX idx_notification_log_user
+    ON notification_log(user_email);
+
+CREATE INDEX idx_notification_log_type
+    ON notification_log(notification_type);
+
+CREATE INDEX idx_notification_log_sent
+    ON notification_log(sent_at DESC);
+
+CREATE INDEX idx_notification_log_opportunity
+    ON notification_log(opportunity_id)
+    WHERE opportunity_id IS NOT NULL;
+
+-- ============================================================================
+-- TRIGGERS: notification tables
+-- ============================================================================
+
+-- Apply auto-update trigger to user_preferences
+CREATE TRIGGER update_user_preferences_updated
+    BEFORE UPDATE ON user_preferences
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- ROW LEVEL SECURITY: notification tables
+-- ============================================================================
+
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_log ENABLE ROW LEVEL SECURITY;
+
+-- User preferences: users can read/update their own preferences
+CREATE POLICY "Users can view their own preferences"
+    ON user_preferences
+    FOR SELECT
+    TO authenticated
+    USING (user_email = current_user);
+
+CREATE POLICY "Users can update their own preferences"
+    ON user_preferences
+    FOR UPDATE
+    TO authenticated
+    USING (user_email = current_user)
+    WITH CHECK (user_email = current_user);
+
+-- Service role has full access
+CREATE POLICY "Enable all access for service role"
+    ON user_preferences
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+CREATE POLICY "Enable all access for service role"
+    ON notification_log
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+-- Notification log: users can view their own notification history
+CREATE POLICY "Users can view their own notifications"
+    ON notification_log
+    FOR SELECT
+    TO authenticated
+    USING (user_email = current_user);
+
+-- ============================================================================
+-- SEED DATA: default user preferences
+-- ============================================================================
+
+INSERT INTO user_preferences (user_email, user_name)
+VALUES
+    ('phil@c2crestoration.com', 'Phil Wright'),
+    ('blake@c2crestoration.com', 'Blake Harkcom')
+ON CONFLICT (user_email) DO NOTHING;
+
+-- ============================================================================
 -- END OF SCHEMA
 -- ============================================================================
